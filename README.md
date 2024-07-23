@@ -1,5 +1,3 @@
-# facerecognition
-
 # Face Recognition System
 
 This repository contains a face recognition system built using MTCNN for face detection and InceptionResnetV1 for face encoding. The system can detect and recognize faces from a live video stream, comparing them against a set of known faces stored in a specified folder.
