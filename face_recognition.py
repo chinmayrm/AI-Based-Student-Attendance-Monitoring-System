@@ -1,58 +1,64 @@
+
+
 import os
 import cv2
 import numpy as np
 import torch
 from facenet_pytorch import InceptionResnetV1, MTCNN
 
-# Initialize MTCNN and InceptionResnetV1
-mtcnn = MTCNN(keep_all=True)
-resnet = InceptionResnetV1(pretrained='vggface2').eval()
-
-# Function to detect and encode faces
-def detect_and_encode(image):
+def detect_and_encode(image, mtcnn, resnet):
+    """
+    Detect faces in an image and return their encodings.
+    """
     with torch.no_grad():
-        boxes, probs = mtcnn.detect(image)
+        boxes, _ = mtcnn.detect(image)
+        encodings = []
         if boxes is not None:
-            faces = []
             for box in boxes:
-                face = image[int(box[1]):int(box[3]), int(box[0]):int(box[2])]
+                x1, y1, x2, y2 = map(int, box)
+                face = image[y1:y2, x1:x2]
                 if face.size == 0:
                     continue
-                face = cv2.resize(face, (160, 160))
+                try:
+                    face = cv2.resize(face, (160, 160))
+                except Exception:
+                    continue
                 face = np.transpose(face, (2, 0, 1)).astype(np.float32) / 255.0
                 face_tensor = torch.tensor(face).unsqueeze(0)
                 encoding = resnet(face_tensor).detach().numpy().flatten()
-                faces.append(encoding)
-            return faces
-    return []
+                encodings.append(encoding)
+        return encodings, boxes
 
-# Function to encode all images in a folder
-def encode_images_in_folder(folder_path):
+def encode_images_in_folder(folder_path, mtcnn, resnet):
+    """
+    Encode all faces in images from a folder. Each face gets its own encoding and name.
+    """
     known_face_encodings = []
     known_face_names = []
 
     for filename in os.listdir(folder_path):
-        if filename.endswith('.jpg') or filename.endswith('.png'):
+        if filename.lower().endswith(('.jpg', '.png')):
             image_path = os.path.join(folder_path, filename)
             known_image = cv2.imread(image_path)
+            if known_image is None:
+                print(f"Warning: Could not load image {image_path}")
+                continue
             known_image_rgb = cv2.cvtColor(known_image, cv2.COLOR_BGR2RGB)
-            encodings = detect_and_encode(known_image_rgb)
-            if encodings:
-                known_face_encodings.extend(encodings)
-                known_face_names.append(os.path.splitext(filename)[0])  # Use filename as the name
-
+            encodings, _ = detect_and_encode(known_image_rgb, mtcnn, resnet)
+            for encoding in encodings:
+                known_face_encodings.append(encoding)
+                known_face_names.append(os.path.splitext(filename)[0])
     return known_face_encodings, known_face_names
 
-# Path to your folder containing images
-folder_path = folder_path = 'E:\\Face-recognition\\Face-recognition\\Images'
-
-# Encode known faces from the folder
-known_face_encodings, known_face_names = encode_images_in_folder(folder_path)
-
-# Function to recognize faces
 def recognize_faces(known_encodings, known_names, test_encodings, threshold=0.6):
+    """
+    Recognize faces by comparing encodings to known faces.
+    """
     recognized_names = []
     for test_encoding in test_encodings:
+        if not known_encodings:
+            recognized_names.append('Not Recognized')
+            continue
         distances = np.linalg.norm(np.array(known_encodings) - test_encoding, axis=1)
         min_distance_idx = np.argmin(distances)
         if distances[min_distance_idx] < threshold:
@@ -61,29 +67,44 @@ def recognize_faces(known_encodings, known_names, test_encodings, threshold=0.6)
             recognized_names.append('Not Recognized')
     return recognized_names
 
-# Start video capture
-cap = cv2.VideoCapture(0)
-threshold = 0.6
+def main():
+    # Initialize models
+    mtcnn = MTCNN(keep_all=True)
+    resnet = InceptionResnetV1(pretrained='vggface2').eval()
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
+    # Path to your folder containing images
+    folder_path = r'E:\MY PROJECTS\Published\Face-Recognition\Images'
 
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    test_face_encodings = detect_and_encode(frame_rgb)
+    # Encode known faces from the folder
+    known_face_encodings, known_face_names = encode_images_in_folder(folder_path, mtcnn, resnet)
 
-    if test_face_encodings and known_face_encodings:
-        names = recognize_faces(known_face_encodings, known_face_names, test_face_encodings, threshold)
-        for name, box in zip(names, mtcnn.detect(frame_rgb)[0]):
-            if box is not None:
-                (x1, y1, x2, y2) = map(int, box)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(frame, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    # Start video capture
+    cap = cv2.VideoCapture(0)
+    threshold = 0.6
 
-    cv2.imshow('Face Recognition', frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    print("Press 'q' to quit.")
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-cap.release()
-cv2.destroyAllWindows()
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        test_face_encodings, boxes = detect_and_encode(frame_rgb, mtcnn, resnet)
+
+        if test_face_encodings and known_face_encodings and boxes is not None:
+            names = recognize_faces(known_face_encodings, known_face_names, test_face_encodings, threshold)
+            for name, box in zip(names, boxes):
+                if box is not None:
+                    x1, y1, x2, y2 = map(int, box)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(frame, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+        cv2.imshow('Face Recognition', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
