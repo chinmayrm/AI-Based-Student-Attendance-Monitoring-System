@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Face Recognition Attendance System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background: #f8f9fa; }
+        .hero { background: #0d6efd; color: #fff; padding: 3rem 1rem; border-radius: 1rem; margin-bottom: 2rem; }
+        .role-card { min-height: 220px; }
+        .project-info { background: #fff; border-radius: 1rem; padding: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">Face Recognition Attendance</a>
+    </div>
+</nav>
+<div class="container mt-4">
+    <div class="hero text-center">
+        <h1 class="display-4">Welcome to the Face Recognition Attendance System</h1>
+        <p class="lead">A modern, secure, and efficient way to manage classroom attendance for teachers and administrators.</p>
+    </div>
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card role-card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Super Admin</h5>
+                    <p class="card-text">Manage teachers, students, and oversee the entire attendance system.</p>
+                    <a href="{{ url_for('admin_login') }}" class="btn btn-primary" role="button">Admin Login</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card role-card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Teacher</h5>
+                    <p class="card-text">Mark attendance, manage your students, and view attendance reports.</p>
+                    <a href="{{ url_for('teacher_login') }}" class="btn btn-success" role="button">Teacher Login</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card role-card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Student</h5>
+                    <p class="card-text">Attendance is marked automatically via face recognition. You can view your attendance history by entering your USN.</p>
+                    <a href="{{ url_for('student_attendance_lookup') }}" class="btn btn-info mt-2" role="button">View My Attendance</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="project-info mt-4">
+        <h3>About This Project</h3>
+        <p>This web application is designed to streamline attendance management in educational institutions using face recognition technology. It supports multiple user roles (Super Admin, Teacher, Student) and provides a secure, user-friendly interface for managing attendance records.</p>
+        <ul>
+            <li><strong>Super Admin:</strong> Add/manage teachers and students, view all attendance data.</li>
+            <li><strong>Teacher:</strong> Mark attendance (face recognition/manual), manage students, view reports.</li>
+            <li><strong>Student:</strong> Attendance is marked via face recognition; no login required.</li>
+        </ul>
+        <h5>Key Features</h5>
+        <ul>
+            <li>Face recognition-based and manual attendance marking</li>
+            <li>Role-based access for admins and teachers</li>
+            <li>Student management with photo upload and USN/semester tracking</li>
+            <li>Attendance reports (daily, monthly, student-wise)</li>
+            <li>Secure authentication and session management</li>
+            <li>Modern, responsive web interface</li>
+            <li>Powered by Python Flask, PostgreSQL, Bootstrap</li>
+        </ul>
+        <h5>How to Use</h5>
+        <ol>
+            <li>Super Admin and Teachers can log in from this page.</li>
+            <li>Admins add teachers and students; teachers manage their own students and mark attendance.</li>
+            <li>Students are marked present via face recognition or manually by teachers.</li>
+        </ol>
+        <p class="text-muted">For more details or support, contact the system administrator.</p>
+    </div>
+</div>
+<footer class="text-center mt-5 mb-3 text-muted">&copy; 2025 Face Recognition Attendance System</footer>
+</body>
+</html>
