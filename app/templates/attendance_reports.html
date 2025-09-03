@@ -7,8 +7,45 @@
 </head>
 <body class="bg-light">
 <div class="container mt-5">
-    <h2>Attendance Reports (Coming Soon)</h2>
-    <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    <h2>Attendance Reports</h2>
+    <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary mb-3">Back to Dashboard</a>
+    <form method="get" class="mb-3">
+        <label for="date" class="form-label">Select Date:</label>
+        <input type="date" id="date" name="date" class="form-control d-inline-block w-auto" value="{{ selected_date.strftime('%Y-%m-%d') if selected_date else '' }}">
+        <button type="submit" class="btn btn-primary ms-2">Filter</button>
+        {% if selected_date %}
+        <a href="{{ url_for('attendance_reports') }}" class="btn btn-outline-secondary ms-2">Clear</a>
+        {% endif %}
+    </form>
+    {% if sorted_dates %}
+        {% for date in sorted_dates %}
+            <h5 class="mt-4">Date: {{ date.strftime('%Y-%m-%d') }}</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Student Name</th>
+                            <th>USN</th>
+                            <th>Status</th>
+                            <th>Subject</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for record in grouped_records[date] %}
+                        <tr>
+                            <td>{{ students[record.student_id].name if record.student_id in students else 'Unknown' }}</td>
+                            <td>{{ students[record.student_id].usn if record.student_id in students else 'Unknown' }}</td>
+                            <td>{{ record.status }}</td>
+                            <td>{{ record.subject }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info">No attendance records found.</div>
+    {% endif %}
 </div>
 </body>
 </html>

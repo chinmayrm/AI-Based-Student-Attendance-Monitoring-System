@@ -7,8 +7,32 @@
 </head>
 <body class="bg-light">
 <div class="container mt-5">
-    <h2>Mark Attendance (Coming Soon)</h2>
-    <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    <h2>Face Recognition Attendance</h2>
+    <p>Use your webcam to capture a photo of the class. The system will recognize students and mark their attendance.</p>
+    <form id="face-attendance-form" method="post" enctype="multipart/form-data" action="{{ url_for('face_recognition_attendance') }}">
+        <div class="mb-3">
+            <video id="video" width="480" height="360" autoplay class="border"></video>
+            <canvas id="canvas" width="480" height="360" style="display:none;"></canvas>
+        </div>
+        <input type="hidden" name="image_data" id="image_data">
+        <button type="button" class="btn btn-primary" onclick="capturePhoto()">Capture & Mark Attendance</button>
+        <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary ms-2">Back to Dashboard</a>
+    </form>
+    <script>
+    // Access webcam
+    const video = document.getElementById('video');
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => { video.srcObject = stream; })
+        .catch(err => { alert('Webcam access denied: ' + err); });
+    // Capture photo
+    function capturePhoto() {
+        const canvas = document.getElementById('canvas');
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataURL = canvas.toDataURL('image/jpeg');
+        document.getElementById('image_data').value = dataURL;
+        document.getElementById('face-attendance-form').submit();
+    }
+    </script>
 </div>
 </body>
 </html>

@@ -35,12 +35,39 @@
             </select>
         </div>
         <div class="mb-3">
-            <label for="photo" class="form-label">Photo</label>
-            <input type="file" class="form-control" id="photo" name="photo" accept="image/*" required>
+            <label for="photo" class="form-label">Photo (Upload or Capture)</label>
+            <input type="file" class="form-control mb-2" id="photo" name="photo" accept="image/*">
+            <div class="mb-2">
+                <video id="video" width="320" height="240" autoplay class="border"></video>
+                <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+            </div>
+            <button type="button" class="btn btn-primary mb-2" id="capture">Capture Photo</button>
+            <input type="hidden" name="captured_image" id="captured_image">
+            <div id="preview" class="mb-2"></div>
         </div>
         <button type="submit" class="btn btn-success">Add Student</button>
         <a href="{{ url_for('admin_students') }}" class="btn btn-secondary">Cancel</a>
     </form>
+</div>
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const captureBtn = document.getElementById('capture');
+    const capturedInput = document.getElementById('captured_image');
+    const preview = document.getElementById('preview');
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true }).then(function(stream) {
+            video.srcObject = stream;
+            video.play();
+        });
+    }
+    captureBtn.addEventListener('click', function() {
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/png');
+        capturedInput.value = dataUrl;
+        preview.innerHTML = `<img src="${dataUrl}" class="img-thumbnail mt-2" width="160">`;
+    });
+</script>
 </div>
 </body>
 </html>
