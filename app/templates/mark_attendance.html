@@ -14,6 +14,10 @@
             <video id="video" width="480" height="360" autoplay class="border"></video>
             <canvas id="canvas" width="480" height="360" style="display:none;"></canvas>
         </div>
+        <div class="mb-3">
+            <label for="attendance_date" class="form-label">Select Date:</label>
+            <input type="date" id="attendance_date" name="attendance_date" class="form-control w-auto d-inline-block" value="{{ (request.form.attendance_date or request.args.get('attendance_date') or '') }}">
+        </div>
         <input type="hidden" name="image_data" id="image_data">
         <button type="button" class="btn btn-primary" onclick="capturePhoto()">Capture & Mark Attendance</button>
         <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary ms-2">Back to Dashboard</a>
@@ -30,6 +34,12 @@
         canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataURL = canvas.toDataURL('image/jpeg');
         document.getElementById('image_data').value = dataURL;
+        // Optionally validate date
+        const dateInput = document.getElementById('attendance_date');
+        if (!dateInput.value) {
+            alert('Please select a date for attendance.');
+            return;
+        }
         document.getElementById('face-attendance-form').submit();
     }
     </script>

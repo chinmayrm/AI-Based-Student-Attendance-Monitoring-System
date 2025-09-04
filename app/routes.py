@@ -1,4 +1,3 @@
-
 from flask import render_template, request, redirect, url_for, session, flash
 from app import app, db
 from app.models import Admin, Teacher, Student, Attendance
@@ -83,39 +82,68 @@ def face_recognition_attendance():
     # Detect faces in uploaded image
     rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     face_locations = face_recognition.face_locations(rgb_img)
+    print(f"[DEBUG] Number of faces detected: {len(face_locations)}")
     if not face_locations:
         flash('No faces detected in the image. Please try again.', 'warning')
         return redirect(url_for('mark_attendance'))
     face_encodings = face_recognition.face_encodings(rgb_img, face_locations)
     present_ids = set()
-    for face_encoding in face_encodings:
-        matches = face_recognition.compare_faces(known_encodings, face_encoding, tolerance=0.5)
-        for idx, match in enumerate(matches):
-            if match:
-                present_ids.add(known_ids[idx])
+    matched_students = set()
+    for i, face_encoding in enumerate(face_encodings):
+        if not known_encodings:
+            continue
+        distances = face_recognition.face_distance(known_encodings, face_encoding)
+        min_distance = np.min(distances)
+        best_match_index = np.argmin(distances)
+        if min_distance < 0.5:  # adjust tolerance as needed
+            student_id = known_ids[best_match_index]
+            if student_id not in matched_students:
+                present_ids.add(student_id)
+                matched_students.add(student_id)
+                print(f"[DEBUG] Face {i} matched student_id={student_id} (distance={min_distance})")
+            else:
+                print(f"[DEBUG] Face {i} matched already-present student_id={student_id} (distance={min_distance})")
+        else:
+            print(f"[DEBUG] Face {i} did not match any student (min_distance={min_distance})")
+    print(f"[DEBUG] Matched student IDs: {list(present_ids)}")
     if not present_ids:
         flash('No matching student faces found. Please try again.', 'danger')
         return redirect(url_for('mark_attendance'))
-    # Mark attendance for today
-    today = datetime.now().date()
+    # Mark attendance for selected date
+    attendance_date_str = request.form.get('attendance_date')
+    if attendance_date_str:
+        try:
+            attendance_date = datetime.strptime(attendance_date_str, '%Y-%m-%d').date()
+        except Exception:
+            flash('Invalid date format.', 'danger')
+            return redirect(url_for('mark_attendance'))
+    else:
+        attendance_date = datetime.now().date()
     for student in students:
         status = 'Present' if student.id in present_ids else 'Absent'
-        already_marked = db.session.query(db.exists().where(
-            (db.func.date(Attendance.date) == today) &
-            (Attendance.student_id == student.id) &
-            (Attendance.teacher_id == teacher.id) &
-            (Attendance.subject == subject)
-        )).scalar()
-        if not already_marked:
+        attendance_record = Attendance.query.filter(
+            Attendance.student_id == student.id,
+            Attendance.teacher_id == teacher.id,
+            db.func.date(Attendance.date) == attendance_date,
+            Attendance.subject == subject
+        ).first()
+        if attendance_record:
+            attendance_record.status = status
+            db.session.commit()
+            print(f"[DEBUG] Updated attendance: student_id={student.id}, status={status}, date={attendance_date}, subject={subject}")
+        else:
             attendance = Attendance(
                 student_id=student.id,
                 teacher_id=teacher.id,
-                date=today,
+                date=attendance_date,
                 status=status,
                 subject=subject
             )
             db.session.add(attendance)
+            db.session.commit()
+            print(f"[DEBUG] Added attendance: student_id={student.id}, status={status}, date={attendance_date}, subject={subject}")
     db.session.commit()
+    print(f"[DEBUG] Committed attendance for date={attendance_date}, subject={subject}, teacher_id={teacher.id}")
     flash(f'Attendance marked. Present: {len(present_ids)} student(s).', 'success')
     return redirect(url_for('teacher_dashboard'))
 # All imports at the top
@@ -212,7 +240,11 @@ def attendance_reports():
         except Exception:
             selected_date = None
     attendance_records = query.all()
+    print(f"[DEBUG] Attendance report: teacher_id={teacher.id}, subject={teacher.subject}, date={selected_date}")
+    print(f"[DEBUG] Found {len(attendance_records)} attendance records")
     students = {s.id: s for s in Student.query.all()}
+    for rec in attendance_records:
+        print(f"[DEBUG] Record: student_id={rec.student_id}, usn={students[rec.student_id].usn if rec.student_id in students else 'Unknown'}, status={rec.status}, date={rec.date}, subject={rec.subject}")
     # Group records by date
     from collections import defaultdict
     grouped_records = defaultdict(list)
@@ -252,28 +284,17 @@ def mark_attendance():
             return (0, usn)
         students = sorted(all_students, key=usn_sort_key)
         if request.method == 'POST':
-            mark_mode = request.form.get('mark_mode', 'present')
-            present_ids = request.form.getlist('present')
-            absent_ids = request.form.getlist('absent')
-            present_ids = set(map(int, present_ids))
-            absent_ids = set(map(int, absent_ids))
-            all_ids = set(s.id for s in students)
             # Get selected date from form
             attendance_date = request.form.get('attendance_date')
             if not attendance_date:
                 flash('Please select a date.', 'danger')
                 return render_template('mark_attendance_manual.html', students=students)
-            # Determine present/absent based on mode
-            if mark_mode == 'present':
-                present_set = present_ids
-                absent_set = all_ids - present_set
-            else:
-                absent_set = absent_ids
-                present_set = all_ids - absent_set
-            # Save attendance for each student
+            print(f"[DEBUG] Manual attendance: teacher_id={teacher.id}, subject={subject}, date={attendance_date}")
             for student in students:
-                status = 'Present' if student.id in present_set else 'Absent'
-                # Prevent duplicate attendance for same date, teacher, subject
+                status = request.form.get(f'status_{student.id}')
+                if status not in ['Present', 'Absent']:
+                    flash(f'Missing status for {student.name} ({student.usn})', 'danger')
+                    return render_template('mark_attendance_manual.html', students=students)
                 already_marked = db.session.query(db.exists().where(
                     (db.func.date(Attendance.date) == attendance_date) &
                     (Attendance.student_id == student.id) &
@@ -289,6 +310,7 @@ def mark_attendance():
                         subject=subject
                     )
                     db.session.add(attendance)
+                    print(f"[DEBUG] Added attendance: student_id={student.id}, usn={student.usn}, status={status}")
             db.session.commit()
             flash('Attendance marked successfully!', 'success')
             return redirect(url_for('teacher_dashboard'))
@@ -340,12 +362,24 @@ def add_student():
             photo_path = os.path.join('app', 'static', 'student_photos', filename)
             os.makedirs(os.path.dirname(photo_path), exist_ok=True)
             photo.save(photo_path)
-            # For now, store empty encoding (face encoding logic can be added later)
-            student = Student(name=name, usn=usn, semester=semester, face_encoding=b'', photo_filename=filename)
-            db.session.add(student)
-            db.session.commit()
-            flash('Student added successfully!', 'success')
-            return redirect(url_for('admin_students'))
+            # Try to generate face encoding
+            import face_recognition
+            import cv2
+            import numpy as np
+            img = face_recognition.load_image_file(photo_path)
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
+            encodings = face_recognition.face_encodings(rgb_img)
+            if encodings:
+                face_encoding = np.array(encodings[0]).tobytes()
+                student = Student(name=name, usn=usn, semester=semester, face_encoding=face_encoding, photo_filename=filename)
+                db.session.add(student)
+                db.session.commit()
+                flash('Student added successfully!', 'success')
+                return redirect(url_for('admin_students'))
+            else:
+                # Remove the saved photo if no face found
+                os.remove(photo_path)
+                flash('No face detected in the uploaded photo. Please upload a clear photo with a visible face.', 'danger')
         else:
             flash('Photo is required.', 'danger')
     return render_template('add_student.html')

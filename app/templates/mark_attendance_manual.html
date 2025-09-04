@@ -38,8 +38,7 @@
                 <tr>
                     <th>Name</th>
                     <th>USN</th>
-                    <th class="present-col">Present</th>
-                    <th class="absent-col">Absent</th>
+                    <th>Status</th>
                 </tr>
             </thead>
             <tbody>
@@ -47,11 +46,15 @@
                 <tr>
                     <td>{{ student.name }}</td>
                     <td>{{ student.usn }}</td>
-                    <td class="present-col">
-                        <input type="checkbox" name="present" value="{{ student.id }}" class="present-checkbox" onclick="toggleExclusive(this)">
-                    </td>
-                    <td class="absent-col">
-                        <input type="checkbox" name="absent" value="{{ student.id }}" class="absent-checkbox" onclick="toggleExclusive(this)">
+                    <td>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="status_{{ student.id }}" id="present_{{ student.id }}" value="Present" required>
+                            <label class="form-check-label" for="present_{{ student.id }}">Present</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="status_{{ student.id }}" id="absent_{{ student.id }}" value="Absent">
+                            <label class="form-check-label" for="absent_{{ student.id }}">Absent</label>
+                        </div>
                     </td>
                 </tr>
             {% endfor %}
@@ -59,35 +62,7 @@
         </table>
         <button type="submit" class="btn btn-success">Submit Attendance</button>
     </form>
-    <script>
-    // Only one of present/absent can be checked per student
-    function toggleExclusive(checkbox) {
-        var row = checkbox.closest('tr');
-        if (checkbox.classList.contains('present-checkbox')) {
-            row.querySelector('.absent-checkbox').checked = false;
-        } else {
-            row.querySelector('.present-checkbox').checked = false;
-        }
-    }
-    // Show/hide columns based on mode
-    function updateMode() {
-        var mode = document.querySelector('input[name="mark_mode"]:checked').value;
-        var presentCols = document.querySelectorAll('.present-col');
-        var absentCols = document.querySelectorAll('.absent-col');
-        if (mode === 'present') {
-            presentCols.forEach(col => col.style.display = 'table-cell');
-            absentCols.forEach(col => col.style.display = 'none');
-        } else {
-            presentCols.forEach(col => col.style.display = 'none');
-            absentCols.forEach(col => col.style.display = 'table-cell');
-        }
-    }
-    document.querySelectorAll('input[name="mark_mode"]').forEach(radio => {
-        radio.addEventListener('change', updateMode);
-    });
-    // Initialize on page load
-    updateMode();
-    </script>
+    <!-- No JS needed for radio version -->
     <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary mt-3">Back to Dashboard</a>
 </div>
 </body>
