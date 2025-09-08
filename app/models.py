@@ -18,8 +18,6 @@ class Student(db.Model):
     name = db.Column(db.String(120), nullable=False)
     usn = db.Column(db.String(20), unique=True, nullable=False)
     semester = db.Column(db.Integer, nullable=False)
-    face_encoding = db.Column(db.LargeBinary, nullable=False)  # Store as binary
-    photo_filename = db.Column(db.String(200))
 
 class Attendance(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -8,9 +8,7 @@ from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError
 import os
-import base64
 import io
-import numpy as np
 from datetime import datetime
 
 
@@ -116,7 +114,6 @@ import os
 import base64
 import io
 import numpy as np
-import cv2
 from datetime import datetime
 
 @app.route('/admin/teachers/edit/<int:teacher_id>', methods=['GET', 'POST'])
@@ -157,67 +154,6 @@ def teacher_dashboard():
     students = Student.query.all()
     return render_template('teacher_dashboard.html', teacher=teacher, students=students)
 
-    image_data = request.form.get('image_data')
-    if not image_data:
-        flash('No image received.', 'danger')
-        return redirect(url_for('mark_attendance'))
-    # Decode base64 image
-    header, encoded = image_data.split(',', 1)
-    img_bytes = base64.b64decode(encoded)
-    img_array = np.frombuffer(img_bytes, np.uint8)
-    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-    # Get all students and their encodings
-    students = Student.query.all()
-    known_encodings = []
-    known_ids = []
-    for student in students:
-        if student.face_encoding:
-            try:
-                encoding = np.frombuffer(student.face_encoding, dtype=np.float64)
-                known_encodings.append(encoding)
-                known_ids.append(student.id)
-            except Exception:
-                continue
-    # Detect faces in uploaded image
-    rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    # Face recognition logic removed for local demo
-    # Mark attendance for selected date
-    attendance_date_str = request.form.get('attendance_date')
-    if attendance_date_str:
-        try:
-            attendance_date = datetime.strptime(attendance_date_str, '%Y-%m-%d').date()
-        except Exception:
-            flash('Invalid date format.', 'danger')
-            return redirect(url_for('mark_attendance'))
-    else:
-        attendance_date = datetime.now().date()
-    for student in students:
-        status = 'Present' if student.id in present_ids else 'Absent'
-        attendance_record = Attendance.query.filter(
-            Attendance.student_id == student.id,
-            Attendance.teacher_id == teacher.id,
-            db.func.date(Attendance.date) == attendance_date,
-            Attendance.subject == subject
-        ).first()
-        if attendance_record:
-            attendance_record.status = status
-            db.session.commit()
-            print(f"[DEBUG] Updated attendance: student_id={student.id}, status={status}, date={attendance_date}, subject={subject}")
-        else:
-            attendance = Attendance(
-                student_id=student.id,
-                teacher_id=teacher.id,
-                date=attendance_date,
-                status=status,
-                subject=subject
-            )
-            db.session.add(attendance)
-            db.session.commit()
-            print(f"[DEBUG] Added attendance: student_id={student.id}, status={status}, date={attendance_date}, subject={subject}")
-    db.session.commit()
-    print(f"[DEBUG] Committed attendance for date={attendance_date}, subject={subject}, teacher_id={teacher.id}")
-    flash(f'Attendance marked. Present: {len(present_ids)} student(s).', 'success')
-    return redirect(url_for('teacher_dashboard'))
 # All imports at the top
 from flask import render_template, request, redirect, url_for, session, flash
 from app import app, db
@@ -414,30 +350,11 @@ def add_student():
         name = request.form['name']
         usn = request.form['usn']
         semester = int(request.form['semester'])
-        photo = request.files['photo']
-        if photo:
-            filename = secure_filename(photo.filename)
-            photo_path = os.path.join('app', 'static', 'student_photos', filename)
-            os.makedirs(os.path.dirname(photo_path), exist_ok=True)
-            photo.save(photo_path)
-            import cv2
-            import numpy as np
-            import face_recognition
-            img = face_recognition.load_image_file(photo_path)
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
-            encodings = face_recognition.face_encodings(rgb_img)
-            if encodings:
-                face_encoding = np.array(encodings[0]).tobytes()
-                student = Student(name=name, usn=usn, semester=semester, face_encoding=face_encoding, photo_filename=filename)
-                db.session.add(student)
-                db.session.commit()
-                flash('Student added successfully!', 'success')
-                return redirect(url_for('admin_students'))
-            else:
-                os.remove(photo_path)
-                flash('No face detected in the uploaded photo. Please upload a clear photo with a visible face.', 'danger')
-        else:
-            flash('Photo is required.', 'danger')
+        student = Student(name=name, usn=usn, semester=semester)
+        db.session.add(student)
+        db.session.commit()
+        flash('Student added successfully!', 'success')
+        return redirect(url_for('admin_students') )
     return render_template('add_student.html')
 
 @app.route('/admin/students/delete/<int:student_id>', methods=['POST'])
@@ -535,37 +452,7 @@ def edit_student_admin(student_id):
         student.name = request.form['name']
         student.usn = request.form['usn']
         student.semester = int(request.form['semester'])
-        photo = request.files.get('photo')
-        captured_image = request.form.get('captured_image')
-        import cv2
-        import numpy as np
-        import face_recognition
-        filename = student.photo_filename
-        face_encoding = student.face_encoding
-        if captured_image:
-            header, encoded = captured_image.split(',', 1)
-            img_bytes = base64.b64decode(encoded)
-            img_array = np.frombuffer(img_bytes, np.uint8)
-            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-            filename = f"{student.usn}_captured.png"
-            photo_path = os.path.join(app.root_path, 'static', 'student_photos', filename)
-            cv2.imwrite(photo_path, img)
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            encodings = face_recognition.face_encodings(rgb_img)
-            if encodings:
-                face_encoding = np.array(encodings[0]).tobytes()
-            student.photo_filename = filename
-        elif photo and photo.filename:
-            filename = secure_filename(photo.filename)
-            photo_path = os.path.join(app.root_path, 'static', 'student_photos', filename)
-            photo.save(photo_path)
-            img = face_recognition.load_image_file(photo_path)
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
-            encodings = face_recognition.face_encodings(rgb_img)
-            if encodings:
-                face_encoding = np.array(encodings[0]).tobytes()
-            student.photo_filename = filename
-        student.face_encoding = face_encoding
+    # ...existing code...
         db.session.commit()
         flash('Student info updated!', 'success')
         return redirect(url_for('admin_students'))
@@ -580,37 +467,7 @@ def edit_student_teacher(student_id):
         student.name = request.form['name']
         student.usn = request.form['usn']
         student.semester = int(request.form['semester'])
-        photo = request.files.get('photo')
-        captured_image = request.form.get('captured_image')
-        import cv2
-        import numpy as np
-        import face_recognition
-        filename = student.photo_filename
-        face_encoding = student.face_encoding
-        if captured_image:
-            header, encoded = captured_image.split(',', 1)
-            img_bytes = base64.b64decode(encoded)
-            img_array = np.frombuffer(img_bytes, np.uint8)
-            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-            filename = f"{student.usn}_captured.png"
-            photo_path = os.path.join(app.root_path, 'static', 'student_photos', filename)
-            cv2.imwrite(photo_path, img)
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            encodings = face_recognition.face_encodings(rgb_img)
-            if encodings:
-                face_encoding = np.array(encodings[0]).tobytes()
-            student.photo_filename = filename
-        elif photo and photo.filename:
-            filename = secure_filename(photo.filename)
-            photo_path = os.path.join(app.root_path, 'static', 'student_photos', filename)
-            photo.save(photo_path)
-            img = face_recognition.load_image_file(photo_path)
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
-            encodings = face_recognition.face_encodings(rgb_img)
-            if encodings:
-                face_encoding = np.array(encodings[0]).tobytes()
-            student.photo_filename = filename
-        student.face_encoding = face_encoding
+        # Photo and face encoding logic removed for manual-only system
         db.session.commit()
         flash('Student info updated!', 'success')
         return redirect(url_for('teacher_students'))
