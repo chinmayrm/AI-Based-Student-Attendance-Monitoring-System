@@ -3,6 +3,7 @@ from app.models import Student, Attendance, Teacher, Admin
 
 def reset_database():
     with app.app_context():
+        db.create_all()  # Ensure all tables exist
         # Delete all attendance records
         Attendance.query.delete()
         # Delete all students

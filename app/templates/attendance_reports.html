@@ -17,6 +17,11 @@
         <a href="{{ url_for('attendance_reports') }}" class="btn btn-outline-secondary ms-2">Clear</a>
         {% endif %}
     </form>
+    <div class="mb-3">
+        <a href="{{ url_for('export_attendance', format='pdf', date=selected_date.strftime('%Y-%m-%d') if selected_date else '') }}" class="btn btn-danger me-2">Download PDF</a>
+        <a href="{{ url_for('export_attendance', format='csv', date=selected_date.strftime('%Y-%m-%d') if selected_date else '') }}" class="btn btn-success me-2">Download CSV</a>
+        <a href="{{ url_for('export_attendance', format='excel', date=selected_date.strftime('%Y-%m-%d') if selected_date else '') }}" class="btn btn-info">Download Excel</a>
+    </div>
     {% if sorted_dates %}
         {% for date in sorted_dates %}
             <h5 class="mt-4">Date: {{ date.strftime('%Y-%m-%d') }}</h5>

@@ -1,3 +1,111 @@
+from flask import send_file, Response
+import pandas as pd
+from fpdf import FPDF
+from flask import render_template, request, redirect, url_for, session, flash
+from app import app, db
+from app.models import Admin, Teacher, Student, Attendance
+from werkzeug.security import check_password_hash
+from werkzeug.utils import secure_filename
+from sqlalchemy.exc import IntegrityError
+import os
+import base64
+import io
+import numpy as np
+from datetime import datetime
+
+
+# Export attendance report in PDF, CSV, or Excel format
+@app.route('/export_attendance/<format>')
+def export_attendance(format):
+    date_str = request.args.get('date')
+    query = Attendance.query
+    # Filter by teacher if logged in as teacher
+    teacher_id = session.get('teacher_id')
+    if teacher_id:
+        query = query.filter(Attendance.teacher_id == teacher_id)
+    if date_str:
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+            query = query.filter(db.func.date(Attendance.date) == date_obj)
+        except Exception:
+            pass
+    records = query.all()
+    students = {s.id: s for s in Student.query.all()}
+    data = []
+    for r in records:
+        student = students.get(r.student_id)
+        data.append({
+            'Student Name': student.name if student else 'Unknown',
+            'USN': student.usn if student else 'Unknown',
+            'Status': r.status,
+            'Subject': r.subject,
+            'Date': r.date.strftime('%Y-%m-%d')
+        })
+    df = pd.DataFrame(data)
+    if format == 'csv':
+        csv_data = df.to_csv(index=False)
+        return Response(csv_data, mimetype='text/csv', headers={"Content-disposition":f"attachment; filename=attendance_{date_str or 'all'}.csv"})
+    elif format == 'excel':
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Attendance')
+        output.seek(0)
+        return send_file(output, download_name=f"attendance_{date_str or 'all'}.xlsx", as_attachment=True)
+    elif format == 'pdf':
+        # Define the path to the DejaVuSans.ttf font
+        font_path = os.path.join(os.path.dirname(__file__), 'static', 'DejaVuSans.ttf')
+        from fpdf import FPDF
+        pdf = FPDF()
+        pdf.add_page()
+        # Add both regular and bold DejaVu fonts
+        pdf.add_font("DejaVu", fname=font_path, uni=True)
+        pdf.add_font("DejaVu", style='B', fname=font_path, uni=True)
+        pdf.set_font("DejaVu", size=12)
+        pdf.cell(0, 10, f"Attendance Report {date_str or ''}", ln=True, align='C')
+        # Stretch table to fill page width
+        total_width = pdf.w - 2 * pdf.l_margin
+        col_widths = [0.32, 0.16, 0.10, 0.28, 0.14]  # Proportions for each column
+        col_widths = [round(total_width * p, 2) for p in col_widths]
+        row_height = pdf.font_size + 4
+        columns = list(df.columns)
+        # Bold headings for specific columns
+        bold_headings = ['Student Name', 'USN', 'Status', 'Subject', 'Date']
+        for idx, col in enumerate(columns):
+            width = col_widths[idx] if idx < len(col_widths) else 10
+            if col in bold_headings:
+                pdf.set_font("DejaVu", 'B', 8)
+            else:
+                pdf.set_font("DejaVu", size=8)
+            align = 'L' if col == 'Student Name' else 'C'
+            pdf.cell(width, row_height, str(col), border=1, align=align)
+        pdf.ln(row_height)
+        # Table rows
+        for i in range(len(df)):
+            for idx, col in enumerate(columns):
+                width = col_widths[idx] if idx < len(col_widths) else 10
+                pdf.set_font("DejaVu", size=8)
+                if col == 'Status':
+                    val = str(df.iloc[i][col])
+                    val = 'P' if val == 'Present' else ('A' if val == 'Absent' else val)
+                elif col == 'USN':
+                    usn = str(df.iloc[i][col])
+                    val = usn[-3:] if len(usn) >= 3 else usn
+                elif col == 'Date':
+                    date_str = str(df.iloc[i][col])
+                    parts = date_str.split('-')
+                    val = f"{parts[1]}-{parts[2]}" if len(parts) == 3 else date_str
+                elif col == 'Student Name':
+                    val = str(df.iloc[i][col])  # Do not truncate or alter name
+                else:
+                    val = str(df.iloc[i][col])
+                align = 'L' if col == 'Student Name' else 'C'
+                pdf.cell(width, row_height, val, border=1, align=align)
+            pdf.ln(row_height)
+        pdf_bytes = pdf.output(dest='S')
+        pdf_output = io.BytesIO(pdf_bytes)
+        return send_file(pdf_output, download_name=f"attendance_{date_str or 'all'}.pdf", as_attachment=True)
+    else:
+        return "Invalid format", 400
 from flask import render_template, request, redirect, url_for, session, flash
 from app import app, db
 from app.models import Admin, Teacher, Student, Attendance
@@ -50,14 +158,6 @@ def teacher_dashboard():
     students = Student.query.all()
     return render_template('teacher_dashboard.html', teacher=teacher, students=students)
 
-# Face recognition attendance route
-@app.route('/teacher/mark_attendance/facerecognition', methods=['POST'])
-def face_recognition_attendance():
-    if 'teacher_id' not in session:
-        return redirect(url_for('teacher_login'))
-    teacher = Teacher.query.get(session['teacher_id'])
-    subject = teacher.subject if teacher else ''
-    # Get image from form
     image_data = request.form.get('image_data')
     if not image_data:
         flash('No image received.', 'danger')
@@ -81,34 +181,7 @@ def face_recognition_attendance():
                 continue
     # Detect faces in uploaded image
     rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    face_locations = face_recognition.face_locations(rgb_img)
-    print(f"[DEBUG] Number of faces detected: {len(face_locations)}")
-    if not face_locations:
-        flash('No faces detected in the image. Please try again.', 'warning')
-        return redirect(url_for('mark_attendance'))
-    face_encodings = face_recognition.face_encodings(rgb_img, face_locations)
-    present_ids = set()
-    matched_students = set()
-    for i, face_encoding in enumerate(face_encodings):
-        if not known_encodings:
-            continue
-        distances = face_recognition.face_distance(known_encodings, face_encoding)
-        min_distance = np.min(distances)
-        best_match_index = np.argmin(distances)
-        if min_distance < 0.5:  # adjust tolerance as needed
-            student_id = known_ids[best_match_index]
-            if student_id not in matched_students:
-                present_ids.add(student_id)
-                matched_students.add(student_id)
-                print(f"[DEBUG] Face {i} matched student_id={student_id} (distance={min_distance})")
-            else:
-                print(f"[DEBUG] Face {i} matched already-present student_id={student_id} (distance={min_distance})")
-        else:
-            print(f"[DEBUG] Face {i} did not match any student (min_distance={min_distance})")
-    print(f"[DEBUG] Matched student IDs: {list(present_ids)}")
-    if not present_ids:
-        flash('No matching student faces found. Please try again.', 'danger')
-        return redirect(url_for('mark_attendance'))
+    # Face recognition logic removed for local demo
     # Mark attendance for selected date
     attendance_date_str = request.form.get('attendance_date')
     if attendance_date_str:
@@ -208,19 +281,11 @@ def teacher_add_student():
         name = request.form['name']
         usn = request.form['usn']
         semester = int(request.form['semester'])
-        photo = request.files['photo']
-        if photo:
-            filename = secure_filename(photo.filename)
-            photo_path = os.path.join('app', 'static', 'student_photos', filename)
-            os.makedirs(os.path.dirname(photo_path), exist_ok=True)
-            photo.save(photo_path)
-            student = Student(name=name, usn=usn, semester=semester, face_encoding=b'', photo_filename=filename)
-            db.session.add(student)
-            db.session.commit()
-            flash('Student added successfully!', 'success')
-            return redirect(url_for('teacher_students'))
-        else:
-            flash('Photo is required.', 'danger')
+        student = Student(name=name, usn=usn, semester=semester)
+        db.session.add(student)
+        db.session.commit()
+        flash('Student added successfully!', 'success')
+        return redirect(url_for('teacher_students'))
     return render_template('add_student.html')
 
 # Attendance reports placeholder
@@ -271,52 +336,46 @@ def attendance_reports():
 def mark_attendance():
     if 'teacher_id' not in session:
         return redirect(url_for('teacher_login'))
-    mode = request.args.get('mode', 'facerecognition')
     teacher = Teacher.query.get(session['teacher_id'])
     subject = teacher.subject if teacher else ''
-    today = db.func.current_date()
-    if mode == 'manual':
-        all_students = Student.query.all()
-        def usn_sort_key(student):
-            usn = student.usn.upper()
-            if usn.startswith('2BA20AI') or usn.startswith('2BA22AI'):
-                return (1, usn)
-            return (0, usn)
-        students = sorted(all_students, key=usn_sort_key)
-        if request.method == 'POST':
-            # Get selected date from form
-            attendance_date = request.form.get('attendance_date')
-            if not attendance_date:
-                flash('Please select a date.', 'danger')
-                return render_template('mark_attendance_manual.html', students=students)
-            print(f"[DEBUG] Manual attendance: teacher_id={teacher.id}, subject={subject}, date={attendance_date}")
-            for student in students:
-                status = request.form.get(f'status_{student.id}')
-                if status not in ['Present', 'Absent']:
-                    flash(f'Missing status for {student.name} ({student.usn})', 'danger')
-                    return render_template('mark_attendance_manual.html', students=students)
-                already_marked = db.session.query(db.exists().where(
-                    (db.func.date(Attendance.date) == attendance_date) &
-                    (Attendance.student_id == student.id) &
-                    (Attendance.teacher_id == teacher.id) &
-                    (Attendance.subject == subject)
-                )).scalar()
-                if not already_marked:
-                    attendance = Attendance(
-                        student_id=student.id,
-                        teacher_id=teacher.id,
-                        date=attendance_date,
-                        status=status,
-                        subject=subject
-                    )
-                    db.session.add(attendance)
-                    print(f"[DEBUG] Added attendance: student_id={student.id}, usn={student.usn}, status={status}")
-            db.session.commit()
-            flash('Attendance marked successfully!', 'success')
-            return redirect(url_for('teacher_dashboard'))
-        return render_template('mark_attendance_manual.html', students=students)
-    else:
-        return render_template('mark_attendance.html')
+    all_students = Student.query.all()
+    def usn_sort_key(student):
+        usn = student.usn.upper()
+        if usn.startswith('2BA20AI') or usn.startswith('2BA22AI'):
+            return (1, usn)
+        return (0, usn)
+    students = sorted(all_students, key=usn_sort_key)
+    if request.method == 'POST':
+        attendance_date = request.form.get('attendance_date')
+        if not attendance_date:
+            flash('Please select a date.', 'danger')
+            return render_template('mark_attendance.html', students=students)
+        print(f"[DEBUG] Manual attendance: teacher_id={teacher.id}, subject={subject}, date={attendance_date}")
+        for student in students:
+            status = request.form.get(f'attendance_{student.id}')
+            if status not in ['Present', 'Absent']:
+                flash(f'Missing status for {student.name} ({student.usn})', 'danger')
+                return render_template('mark_attendance.html', students=students)
+            already_marked = db.session.query(db.exists().where(
+                (db.func.date(Attendance.date) == attendance_date) &
+                (Attendance.student_id == student.id) &
+                (Attendance.teacher_id == teacher.id) &
+                (Attendance.subject == subject)
+            )).scalar()
+            if not already_marked:
+                attendance = Attendance(
+                    student_id=student.id,
+                    teacher_id=teacher.id,
+                    date=attendance_date,
+                    status=status,
+                    subject=subject
+                )
+                db.session.add(attendance)
+                print(f"[DEBUG] Added attendance: student_id={student.id}, usn={student.usn}, status={status}")
+        db.session.commit()
+        flash('Attendance marked successfully!', 'success')
+        return redirect(url_for('teacher_dashboard'))
+    return render_template('mark_attendance.html', students=students)
 
 # Teacher students list
 @app.route('/teacher/students')
@@ -362,10 +421,9 @@ def add_student():
             photo_path = os.path.join('app', 'static', 'student_photos', filename)
             os.makedirs(os.path.dirname(photo_path), exist_ok=True)
             photo.save(photo_path)
-            # Try to generate face encoding
-            import face_recognition
             import cv2
             import numpy as np
+            import face_recognition
             img = face_recognition.load_image_file(photo_path)
             rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
             encodings = face_recognition.face_encodings(rgb_img)
@@ -377,7 +435,6 @@ def add_student():
                 flash('Student added successfully!', 'success')
                 return redirect(url_for('admin_students'))
             else:
-                # Remove the saved photo if no face found
                 os.remove(photo_path)
                 flash('No face detected in the uploaded photo. Please upload a clear photo with a visible face.', 'danger')
         else:
@@ -481,8 +538,11 @@ def edit_student_admin(student_id):
         student.semester = int(request.form['semester'])
         photo = request.files.get('photo')
         captured_image = request.form.get('captured_image')
+        import cv2
+        import numpy as np
+        import face_recognition
         filename = student.photo_filename
-        img = None
+        face_encoding = student.face_encoding
         if captured_image:
             header, encoded = captured_image.split(',', 1)
             img_bytes = base64.b64decode(encoded)
@@ -491,19 +551,22 @@ def edit_student_admin(student_id):
             filename = f"{student.usn}_captured.png"
             photo_path = os.path.join(app.root_path, 'static', 'student_photos', filename)
             cv2.imwrite(photo_path, img)
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            encodings = face_recognition.face_encodings(rgb_img)
+            if encodings:
+                face_encoding = np.array(encodings[0]).tobytes()
             student.photo_filename = filename
         elif photo and photo.filename:
             filename = secure_filename(photo.filename)
             photo_path = os.path.join(app.root_path, 'static', 'student_photos', filename)
             photo.save(photo_path)
             img = face_recognition.load_image_file(photo_path)
-            student.photo_filename = filename
-        # Update face encoding if a new image was provided
-        if img is not None:
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if isinstance(img, np.ndarray) else img
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
             encodings = face_recognition.face_encodings(rgb_img)
             if encodings:
-                student.face_encoding = np.array(encodings[0]).tobytes()
+                face_encoding = np.array(encodings[0]).tobytes()
+            student.photo_filename = filename
+        student.face_encoding = face_encoding
         db.session.commit()
         flash('Student info updated!', 'success')
         return redirect(url_for('admin_students'))
@@ -520,8 +583,11 @@ def edit_student_teacher(student_id):
         student.semester = int(request.form['semester'])
         photo = request.files.get('photo')
         captured_image = request.form.get('captured_image')
+        import cv2
+        import numpy as np
+        import face_recognition
         filename = student.photo_filename
-        img = None
+        face_encoding = student.face_encoding
         if captured_image:
             header, encoded = captured_image.split(',', 1)
             img_bytes = base64.b64decode(encoded)
@@ -530,19 +596,22 @@ def edit_student_teacher(student_id):
             filename = f"{student.usn}_captured.png"
             photo_path = os.path.join(app.root_path, 'static', 'student_photos', filename)
             cv2.imwrite(photo_path, img)
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            encodings = face_recognition.face_encodings(rgb_img)
+            if encodings:
+                face_encoding = np.array(encodings[0]).tobytes()
             student.photo_filename = filename
         elif photo and photo.filename:
             filename = secure_filename(photo.filename)
             photo_path = os.path.join(app.root_path, 'static', 'student_photos', filename)
             photo.save(photo_path)
             img = face_recognition.load_image_file(photo_path)
-            student.photo_filename = filename
-        # Update face encoding if a new image was provided
-        if img is not None:
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if isinstance(img, np.ndarray) else img
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
             encodings = face_recognition.face_encodings(rgb_img)
             if encodings:
-                student.face_encoding = np.array(encodings[0]).tobytes()
+                face_encoding = np.array(encodings[0]).tobytes()
+            student.photo_filename = filename
+        student.face_encoding = face_encoding
         db.session.commit()
         flash('Student info updated!', 'success')
         return redirect(url_for('teacher_students'))

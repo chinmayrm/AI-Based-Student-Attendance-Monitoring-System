@@ -21,22 +21,7 @@
             <label for="semester" class="form-label">Semester</label>
             <input type="number" class="form-control" id="semester" name="semester" value="{{ student.semester }}" min="1" max="10" required>
         </div>
-        <div class="mb-3">
-            <label for="photo" class="form-label">Photo (Upload or Capture)</label>
-            {% if student.photo_filename %}
-                <img src="{{ url_for('static', filename='student_photos/' ~ student.photo_filename) }}" alt="Photo" width="80" height="80" style="object-fit:cover;">
-            {% else %}
-                <span>No photo uploaded</span>
-            {% endif %}
-            <input type="file" class="form-control mt-2 mb-2" id="photo" name="photo" accept="image/*">
-            <div class="mb-2">
-                <video id="video" width="320" height="240" autoplay class="border"></video>
-                <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
-            </div>
-            <button type="button" class="btn btn-primary mb-2" id="capture">Capture Photo</button>
-            <input type="hidden" name="captured_image" id="captured_image">
-            <div id="preview" class="mb-2"></div>
-        </div>
+    <!-- Photo upload/capture removed for manual-only attendance -->
         <button type="submit" class="btn btn-success">Save Changes</button>
         {% if role == 'admin' %}
             <a href="{{ url_for('admin_students') }}" class="btn btn-secondary ms-2">Cancel</a>

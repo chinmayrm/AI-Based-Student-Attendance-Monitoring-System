@@ -18,7 +18,32 @@
     <h2>Attendance for {{ student.name }}</h2>
     <p><strong>USN:</strong> {{ student.usn }}</p>
     <p><strong>Semester:</strong> {{ student.semester }}</p>
-    <div class="alert alert-info">Attendance details coming soon.</div>
+    {% if attendance %}
+    <div class="table-responsive mt-4">
+        <table class="table table-bordered table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Subject</th>
+                    <th>Teacher</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for record in attendance %}
+                <tr>
+                    <td>{{ record.date.strftime('%Y-%m-%d') }}</td>
+                    <td>{{ record.status }}</td>
+                    <td>{{ record.subject }}</td>
+                    <td>{{ record.teacher.name if record.teacher else 'Unknown' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">No attendance records found for this student.</div>
+    {% endif %}
     <a href="{{ url_for('teacher_students') }}" class="btn btn-secondary">Back to Students</a>
 </div>
 </body>

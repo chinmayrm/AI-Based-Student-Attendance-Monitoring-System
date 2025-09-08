@@ -22,7 +22,7 @@
             <tr>
                 <th>Name</th>
                 <th>USN</th>
-                <th>Photo</th>
+                <!-- Photo column removed -->
                 <th>Actions</th>
             </tr>
         </thead>
@@ -31,13 +31,7 @@
             <tr>
                 <td>{{ student.name }}</td>
                 <td>{{ student.usn }}</td>
-                <td>
-                    {% if student.photo_filename %}
-                        <img src="{{ url_for('static', filename='student_photos/' ~ student.photo_filename) }}" alt="Photo" width="60" height="60" style="object-fit:cover;">
-                    {% else %}
-                        No photo
-                    {% endif %}
-                </td>
+                <!-- Photo display removed -->
                 <td>
                     <a href="{{ url_for('view_student_attendance', student_id=student.id) }}" class="btn btn-info btn-sm">View Attendance</a>
                     <a href="{{ url_for('edit_student_teacher', student_id=student.id) }}" class="btn btn-warning btn-sm ms-2">Edit</a>

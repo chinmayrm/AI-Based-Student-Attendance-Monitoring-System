@@ -23,15 +23,7 @@
             <input type="date" class="form-control" id="attendance_date" name="attendance_date" required value="{{ request.form.attendance_date or '' }}">
         </div>
         <div class="mb-3">
-            <label class="form-label me-3">Mark by:</label>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="mark_mode" id="mode_present" value="present" checked>
-                <label class="form-check-label" for="mode_present">Present</label>
-            </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="mark_mode" id="mode_absent" value="absent">
-                <label class="form-check-label" for="mode_absent">Absent</label>
-            </div>
+            <!-- Mark by mode removed, only per-student selection -->
         </div>
         <table class="table table-bordered bg-white">
             <thead>

@@ -7,42 +7,36 @@
 </head>
 <body class="bg-light">
 <div class="container mt-5">
-    <h2>Face Recognition Attendance</h2>
-    <p>Use your webcam to capture a photo of the class. The system will recognize students and mark their attendance.</p>
-    <form id="face-attendance-form" method="post" enctype="multipart/form-data" action="{{ url_for('face_recognition_attendance') }}">
-        <div class="mb-3">
-            <video id="video" width="480" height="360" autoplay class="border"></video>
-            <canvas id="canvas" width="480" height="360" style="display:none;"></canvas>
-        </div>
+    <h2>Mark Attendance</h2>
+    <form method="post" action="{{ url_for('mark_attendance') }}">
         <div class="mb-3">
             <label for="attendance_date" class="form-label">Select Date:</label>
             <input type="date" id="attendance_date" name="attendance_date" class="form-control w-auto d-inline-block" value="{{ (request.form.attendance_date or request.args.get('attendance_date') or '') }}">
         </div>
-        <input type="hidden" name="image_data" id="image_data">
-        <button type="button" class="btn btn-primary" onclick="capturePhoto()">Capture & Mark Attendance</button>
+        <table class="table table-bordered bg-white">
+            <thead>
+                <tr>
+                    <th>Student Name</th>
+                    <th>Attendance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for student in students %}
+                <tr>
+                    <td>{{ student.name }}</td>
+                    <td>
+                        <select name="attendance_{{ student.id }}" class="form-select w-auto d-inline-block">
+                            <option value="Present">Present</option>
+                            <option value="Absent">Absent</option>
+                        </select>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit" class="btn btn-primary">Submit Attendance</button>
         <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary ms-2">Back to Dashboard</a>
     </form>
-    <script>
-    // Access webcam
-    const video = document.getElementById('video');
-    navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => { video.srcObject = stream; })
-        .catch(err => { alert('Webcam access denied: ' + err); });
-    // Capture photo
-    function capturePhoto() {
-        const canvas = document.getElementById('canvas');
-        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataURL = canvas.toDataURL('image/jpeg');
-        document.getElementById('image_data').value = dataURL;
-        // Optionally validate date
-        const dateInput = document.getElementById('attendance_date');
-        if (!dateInput.value) {
-            alert('Please select a date for attendance.');
-            return;
-        }
-        document.getElementById('face-attendance-form').submit();
-    }
-    </script>
 </div>
 </body>
 </html>
